@@ -1,15 +1,37 @@
 #include <fstream>
 #include <iostream>
+#include <vector>
+#include <string>
+#include <cstring>
+#include <algorithm>
+#include <iomanip>
 
+#include "json.hpp"
+#include "httplib.h"
+
+// TODO add api methods that call upon the CLI methods
+// TODO update main method to add a decision for it to be cli or api, like if arg[1] is --api (main split into two branches)
+// TODO migrate tasks.txt file to a SQLite database
+// TODO (optional) improve performance by using modern C++20 features
+
+// TODO create a web UI frontend that calls the JSON API
+// TODO (optional) use LLM for task prioritization based on its status, description, and others
+
+constexpr int HTTP_PORT = 8080;
+
+// vars
+using json = nlohmann::json;
+
+// declarations
 int getTaskCount();
 
-// basically just skip all the dele lines (probably just for the defalt/all types mode)
-// also id gets potentially overwriden after each purge since its simply line number (technically not id)
+// basically just skip all the dele lines (probably just for the default/all types mode)
+// also id gets potentially overwritten after each purge since it's simply a line number (technically not id)
 // method when mode is r
 void modeR(const int argc, char* argv[]) {
     // options going to be done, open, or iprg (inprogress); and -first, -se, or -last (decided to do only one)
     // if given multiple, only the last of the two will be considered
-    // all other options will be given a warning, but it still continues
+    // all other options will be given a warning, but it still continues based on the last valid one (default included)
     std::ifstream infile("tasks.txt");
 
     if (argc == 2) {    // here, also add thier ids next to them too
@@ -315,8 +337,6 @@ void modeP() {
     if (!confirm.empty() && (confirm[0] == 'y' || confirm[0] == 'Y')) purgeTrash();
 }
 
-// method to sync count with number of tasks (auxiliary/admin usage)
-
 // method to get number of lines (delete count.txt file)
 int getTaskCount() {
     std::ifstream file("tasks.txt");
@@ -325,6 +345,10 @@ int getTaskCount() {
     while (std::getline(file, dummy)) count++;
     return count;
 }
+
+// add a method to convert JSON to argv/argc for arguments when calling the above methods
+
+// add http method to get api calls with proper format, use above conversion from json to argv which also calls method
 
 int main(const int argc, char* argv[]) {
 
