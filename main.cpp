@@ -17,9 +17,6 @@
 // TODO create a web UI frontend that calls the JSON API
 // TODO (optional) use LLM for task prioritization based on its status, description, and others
 
-// HTTP
-httplib::Server svr;
-
 constexpr int HTTP_PORT = 8080;
 
 // vars
@@ -361,6 +358,46 @@ void callMode(const modeFunc mode, std::vector<std::string> taskJson) {
 }   // not yet tested
 
 // add http method to get api calls with proper format, use the above conversion from JSON to argv, which also calls the method
+void run_server() {
+    // HTTP
+    httplib::Server svr;
+
+    // Get methods (still needs to be tested)
+    svr.Get("/tasks", [](const httplib::Request& req, httplib::Response& res) {
+        std::string firstIndex = req.get_param_value("first");
+        std::string lastIndex = req.get_param_value("last");
+        std::string taskType = req.get_param_value("type");
+
+        std::vector<std::string> taskJson;
+
+        if (!taskType.empty()) {    // type safety so incorrect stuff is not passed
+            if (taskType == "open" || taskType == "OPEN") taskJson.emplace_back("-open");
+            else if (taskType == "done" || taskType == "DONE") taskJson.emplace_back("-done");
+            else if (taskType == "iprg" || taskType == "IPRG") taskJson.emplace_back("-iprg");
+            else {
+                std::cout << "Warning: unknown task type " << taskType << std::endl;
+            }
+        }
+        if (!firstIndex.empty()) {
+            taskJson.emplace_back("-first");
+            taskJson.push_back(firstIndex);
+        }
+        if (!lastIndex.empty()) {
+            taskJson.emplace_back("-last");
+            taskJson.push_back(lastIndex);
+        }
+
+        callMode(modeR, taskJson);
+
+        res.set_content("OK\n", "text/plain");
+    });
+
+    // Post methods
+
+    // Put methods
+
+    // Delete methods
+}
 
 int main(const int argc, char* argv[]) {
 
