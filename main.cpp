@@ -17,6 +17,9 @@
 // TODO create a web UI frontend that calls the JSON API
 // TODO (optional) use LLM for task prioritization based on its status, description, and others
 
+// HTTP
+httplib::Server svr;
+
 constexpr int HTTP_PORT = 8080;
 
 // vars
@@ -346,9 +349,18 @@ int getTaskCount() {
     return count;
 }
 
-// add a method to convert JSON to argv/argc for arguments when calling the above methods
+// for method modes that take in cli arguments
+using modeFunc = void(*)(int, char**);
 
-// add http method to get api calls with proper format, use above conversion from json to argv which also calls method
+// add a method to convert JSON to argv/argc for arguments, then it calls the appropriate function (modeP can be called directly)
+void callMode(const modeFunc mode, std::vector<std::string> taskJson) {
+    std::vector<char*> cargs;
+    cargs.reserve(taskJson.size());
+    for (auto& s : taskJson) cargs.push_back(s.data());
+    mode(static_cast<int>(cargs.size()), cargs.data());
+}   // not yet tested
+
+// add http method to get api calls with proper format, use the above conversion from JSON to argv, which also calls the method
 
 int main(const int argc, char* argv[]) {
 
