@@ -32,6 +32,7 @@ void modeR(const int argc, char* argv[]) {
     // options going to be done, open, or iprg (inprogress); and -first, -se, or -last (decided to do only one)
     // if given multiple, only the last of the two will be considered
     // all other options will be given a warning, but it still continues based on the last valid one (default included)
+
     std::ifstream infile("tasks.txt");
 
     if (argc == 2) {    // here, also add thier ids next to them too
@@ -84,7 +85,7 @@ void modeR(const int argc, char* argv[]) {
                     && std::all_of(argv[i + 2], argv[i + 2] + strlen(argv[i + 2]), ::isdigit)
                     && std::stoi(argv[i + 1]) < std::stoi(argv[i + 2])
                     && std::stoi(argv[i + 2]) <= maxNumber
-                    && std::stoi(argv[i + 1]) <= 0) {
+                    && std::stoi(argv[i + 1]) >= 0) {
                     rangeMode = "se";
                     firstNumber = std::stoi(argv[i + 1]);
                     secondNumber = std::stoi(argv[i + 2]);
@@ -355,9 +356,9 @@ using modeFunc = void(*)(int, char**);
 void callMode(modeFunc mode, std::vector<std::string> cliArgs) {
     // first add arg [0] as a placeholder
     std::vector<std::string> fullArgs;
-    fullArgs.emplace_back("./a.out");     // ← auto-add program name
-    fullArgs.emplace_back("api");         // so it starts at arg [2]
-    fullArgs.insert(fullArgs.end(),    // ← append handler args
+    fullArgs.emplace_back("./todo");           // argv[0]
+    fullArgs.emplace_back("a");   // argv[1] = "r" or "w"
+    fullArgs.insert(fullArgs.end(),            // argv[2+] = flags
                     std::make_move_iterator(cliArgs.begin()),
                     std::make_move_iterator(cliArgs.end()));
 
@@ -391,11 +392,16 @@ void run_server() {
                 std::cout << "Warning: unknown task type " << taskType << std::endl;
             }
         }
-        if (!firstIndex.empty()) {
+
+        // se when both provided, else use first or last
+        if (!firstIndex.empty() && !lastIndex.empty()) {
+            taskJson.emplace_back("-se");
+            taskJson.push_back(firstIndex);
+            taskJson.push_back(lastIndex);
+        } else if (!firstIndex.empty()) {
             taskJson.emplace_back("-first");
             taskJson.push_back(firstIndex);
-        }
-        if (!lastIndex.empty()) {
+        } else if (!lastIndex.empty()) {
             taskJson.emplace_back("-last");
             taskJson.push_back(lastIndex);
         }
@@ -432,6 +438,10 @@ void run_server() {
     });
 
     // Put methods
+    svr.Put("/tasks/:id", [](const httplib::Request& req, httplib::Response& res) {
+        std::string id = req.get_param_value("id");
+        std::string taskType = req.get_param_value("type");
+    });
 
     // Delete methods
 
