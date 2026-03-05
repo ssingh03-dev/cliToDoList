@@ -158,6 +158,8 @@ void modeW(const int argc, char* argv[]) {
     // the 3rd arg is the task description, and it's assumed the task description is surrounded by quotation marks
     // for extra flags, it's going to be put in a loop and only looks for one flag, open, done, or iprg
     // if nothing or invalid results only, then defaults to open flag
+    std::string taskDesc = argv[2];  // ← copy immediately
+
     std::ofstream outfile("tasks.txt", std::ios::app);
 
     std::string taskType = "OPEN";  // its the default
@@ -176,7 +178,7 @@ void modeW(const int argc, char* argv[]) {
         }
     }
 
-    outfile << taskType << " " << argv[2] << std::endl;
+    outfile << taskType << " " << taskDesc << std::endl;
     std::cout << "Task added." << std::endl;
 
     outfile.close();
@@ -350,10 +352,21 @@ int getTaskCount() {
 using modeFunc = void(*)(int, char**);
 
 // add a method to convert JSON to argv/argc for arguments, then it calls the appropriate function (modeP can be called directly)
-void callMode(const modeFunc mode, std::vector<std::string> taskJson) {
+void callMode(modeFunc mode, std::vector<std::string> cliArgs) {
+    // first add arg [0] as a placeholder
+    std::vector<std::string> fullArgs;
+    fullArgs.emplace_back("./a.out");     // ← auto-add program name
+    fullArgs.emplace_back("api");         // so it starts at arg [2]
+    fullArgs.insert(fullArgs.end(),    // ← append handler args
+                    std::make_move_iterator(cliArgs.begin()),
+                    std::make_move_iterator(cliArgs.end()));
+
     std::vector<char*> cargs;
-    cargs.reserve(taskJson.size());
-    for (auto& s : taskJson) cargs.push_back(s.data());
+    cargs.reserve(fullArgs.size());
+    for (const auto& s : fullArgs) {
+        cargs.push_back(const_cast<char*>(s.c_str()));
+    }
+
     mode(static_cast<int>(cargs.size()), cargs.data());
 }   // not yet tested
 
@@ -393,10 +406,39 @@ void run_server() {
     });
 
     // Post methods
+    svr.Post("/tasks", [](const httplib::Request& req, httplib::Response& res) {
+        json body;
+        try {
+            body = json::parse(req.body);
+        } catch (...) {
+            res.status = 400;
+            res.set_content("Invalid JSON\n", "text/plain");
+            return;
+        }
+
+        std::string taskString = body.value("task", "");
+        std::string taskType = body.value("type", "OPEN");
+
+        std::vector<std::string> taskJson;
+
+        taskJson.push_back(taskString);
+        if (taskType == "done" || taskType == "DONE") taskJson.emplace_back("-done");
+        else if (taskType == "iprg" || taskType == "IPRG") taskJson.emplace_back("-iprg");
+        else taskJson.emplace_back("-open");
+
+        callMode(modeW, taskJson);
+
+        res.set_content("OK\n", "text/plain");
+    });
 
     // Put methods
 
     // Delete methods
+
+    // Run Server
+    std::cout << "Starting server...\n";
+    svr.listen("0.0.0.0", 8080);  // ← BLOCKS HERE FOREVER
+    std::cout << "This line never runs\n";
 }
 
 int main(const int argc, char* argv[]) {
@@ -405,6 +447,11 @@ int main(const int argc, char* argv[]) {
     // Look through the note app to see what to implement.
 
     // The To-Do List file is system-based and automatically generated.
+
+    if (argc > 1 && strcmp(argv[1], "--api") == 0) {
+        run_server();   // blocks here until Ctrl+C
+        return 0;            // never reached normally
+    }
 
     if (argc < 2) {
         std::cout << "No mode specified." << std::endl;
