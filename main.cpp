@@ -438,9 +438,22 @@ void run_server() {
     });
 
     // Put methods
-    svr.Put("/tasks/:id", [](const httplib::Request& req, httplib::Response& res) {
-        std::string id = req.get_param_value("id");
+    svr.Put(R"(/tasks/(\d+))", [](const httplib::Request& req, httplib::Response& res) {
+        std::string id = req.matches[1];
         std::string taskType = req.get_param_value("type");
+
+        std::vector<std::string> taskJson;
+
+        taskJson.push_back(id);
+        if (!taskType.empty()) {        // anything else basically is ignored
+            if (taskType == "done" || taskType == "DONE") taskJson.emplace_back("-done");
+            else if (taskType == "iprg" || taskType == "IPRG") taskJson.emplace_back("-iprg");
+            else if (taskType == "open" || taskType == "OPEN") taskJson.emplace_back("-open");
+        }
+
+        callMode(modeU, taskJson);
+
+        res.set_content("OK\n", "text/plain");
     });
 
     // Delete methods
