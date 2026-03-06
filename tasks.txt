@@ -4,7 +4,7 @@ DONE This is Test Task Three.
 OPEN This is Test Task Four.
 OPEN This is Test Task Six.
 OPEN This is Test Task Seven.
-IPRG This is Test Task Eight.
+OPEN This is Test Task Eight.
 OPEN This is Test Task Nine.
 OPEN This is Test Task Ten.
-IPRG This is API Test Task One.
+OPEN This is API Test Task One.

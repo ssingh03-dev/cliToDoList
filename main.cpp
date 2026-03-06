@@ -369,7 +369,20 @@ void callMode(modeFunc mode, std::vector<std::string> cliArgs) {
     }
 
     mode(static_cast<int>(cargs.size()), cargs.data());
-}   // not yet tested
+}
+
+std::vector<std::string> split(const std::string& str, char delim) {
+    std::vector<std::string> result;
+    std::istringstream ss(str);
+    std::string token;
+    while (std::getline(ss, token, delim)) {
+        if (!token.empty()) {
+            result.push_back(token);
+        }
+    }
+    return result;
+}
+
 
 // add http method to get api calls with proper format, use the above conversion from JSON to argv, which also calls the method
 void run_server() {
@@ -435,7 +448,7 @@ void run_server() {
         callMode(modeW, taskJson);
 
         res.set_content("OK\n", "text/plain");
-    });
+    });     // works
 
     // Put methods
     svr.Put(R"(/tasks/(\d+))", [](const httplib::Request& req, httplib::Response& res) {
@@ -454,9 +467,21 @@ void run_server() {
         callMode(modeU, taskJson);
 
         res.set_content("OK\n", "text/plain");
-    });
+    });     // works
 
-    // Delete methods
+    // Delete methods (one for soft delete and one for purging the trash can (soft delete takes id, purge is nothing but needs to be confirmed in terminal))
+    svr.Delete("/tasks", [](const httplib::Request& req, httplib::Response& res) {
+        std::string ids = req.get_param_value("ids");
+        if (ids.empty()) {
+            res.status = 400;
+            res.set_content("Missing ids parameter\n", "text/plain");
+            return;
+        }
+
+        std::vector<std::string> taskJson = split(ids, ',');
+
+        callMode(modeD, taskJson);
+    });     // works
 
     // Run Server
     std::cout << "Starting server...\n";
