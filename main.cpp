@@ -313,7 +313,7 @@ void purgeTrash() {
 }
 
 // method to purge the marked soft-deleted items
-void modeP() {
+void modeP(bool isCli = true) {
     // Prints all the marked items and confirms with the user if they still want to purge the items
     std::ifstream infile("tasks.txt");
 
@@ -331,13 +331,20 @@ void modeP() {
         return;
     }
 
-    std::string confirm;
-    std::cout << std::endl
-              << "Purge ALL " << items
-              << " TRASH items? This CANNOT be undone! (y/n): ";
-    std::getline(std::cin, confirm);
+    if (isCli) {    // only in cli you confirm here; in http, purgeTrash is called in the delete method
+        std::string confirm;
+        std::cout << std::endl
+                  << "Purge ALL " << items
+                  << " TRASH item(s) listed above? This CANNOT be undone! (y/n): ";
+        std::getline(std::cin, confirm);
 
-    if (!confirm.empty() && (confirm[0] == 'y' || confirm[0] == 'Y')) purgeTrash();
+        if (!confirm.empty() && (confirm[0] == 'y' || confirm[0] == 'Y')) purgeTrash();
+    } else {
+        std::string confirm;
+        std::cout << std::endl
+                  << "Purge ALL " << items
+                  << " TRASH item(s) listed above? This CANNOT be undone! (If yes, paste handler after DELETE route).";
+    }
 }
 
 // method to get number of lines (delete count.txt file)
@@ -499,7 +506,13 @@ void run_server() {
         if (token.empty()) {
             // generate token here and save it in run_server variable (only latest token considered)
             generateToken();
-            res.set_content("Confirm: ?token=" + latestToken + "\n", "text/plain");
+
+            std::ostringstream oss;
+            std::streambuf* old = std::cout.rdbuf(oss.rdbuf());  // Redirect cout
+            modeP(false);
+            std::cout.rdbuf(old);  // Restore
+
+            res.set_content(oss.str()+"\nConfirm: ?token=" + latestToken + "\n", "text/plain");
             return;
         }
 
@@ -509,10 +522,10 @@ void run_server() {
             return;
         }
 
-        modeP();
+        purgeTrash();
 
         res.set_content("OK\n", "text/plain");
-    });     // works (needs to be confirmed in terminal, but)
+    });     // works (doesn't need to be confirmed in terminal)
 
     // basic methods work, but need updating to return the information somehow
     // for purge utilize token, first request generates a token which is used in the second request as a way to confirm
