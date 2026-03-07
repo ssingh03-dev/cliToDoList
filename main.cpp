@@ -383,6 +383,17 @@ std::vector<std::string> split(const std::string& str, char delim) {
     return result;
 }
 
+std::string latestToken;
+
+void generateToken() {
+    thread_local std::mt19937 gen(std::random_device{}());
+    thread_local std::uniform_int_distribution<> dis(0, 15);
+
+    std::string token(16, '0');
+    std::generate(token.begin(), token.end(),
+        [&]{ return "0123456789abcdef"[dis(gen)]; });
+    latestToken = token;
+}
 
 // add http method to get api calls with proper format, use the above conversion from JSON to argv, which also calls the method
 void run_server() {
@@ -482,6 +493,30 @@ void run_server() {
 
         callMode(modeD, taskJson);
     });     // works
+
+    svr.Delete("/tasks/purge", [](const httplib::Request& req, httplib::Response& res) {
+        std::string token = req.get_param_value("token");
+        if (token.empty()) {
+            // generate token here and save it in run_server variable (only latest token considered)
+            generateToken();
+            res.set_content("Confirm: ?token=" + latestToken + "\n", "text/plain");
+            return;
+        }
+
+        if (token != latestToken) {
+            res.status = 401;
+            res.set_content("Invalid token\n", "text/plain");
+            return;
+        }
+
+        modeP();
+
+        res.set_content("OK\n", "text/plain");
+    });     // works (needs to be confirmed in terminal, but)
+
+    // basic methods work, but need updating to return the information somehow
+    // for purge utilize token, first request generates a token which is used in the second request as a way to confirm
+    // purge token works, just need a way around the terminal needing user input afterwards
 
     // Run Server
     std::cout << "Starting server...\n";
