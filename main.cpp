@@ -360,7 +360,10 @@ int getTaskCount() {
 using modeFunc = void(*)(int, char**);
 
 // add a method to convert JSON to argv/argc for arguments, then it calls the appropriate function (modeP can be called directly)
-void callMode(modeFunc mode, std::vector<std::string> cliArgs) {
+std::string callMode(modeFunc mode, std::vector<std::string> cliArgs) {
+    std::ostringstream oss;
+    std::streambuf* old = std::cout.rdbuf(oss.rdbuf());  // Redirect cout
+
     // first add arg [0] as a placeholder
     std::vector<std::string> fullArgs;
     fullArgs.emplace_back("./todo");           // argv[0]
@@ -376,6 +379,10 @@ void callMode(modeFunc mode, std::vector<std::string> cliArgs) {
     }
 
     mode(static_cast<int>(cargs.size()), cargs.data());
+
+    std::cout.rdbuf(old);  // Restore
+
+    return oss.str();
 }
 
 std::vector<std::string> split(const std::string& str, char delim) {
@@ -437,9 +444,7 @@ void run_server() {
             taskJson.push_back(lastIndex);
         }
 
-        callMode(modeR, taskJson);
-
-        res.set_content("OK\n", "text/plain");
+        res.set_content(callMode(modeR, taskJson), "text/plain");
     });
 
     // Post methods
@@ -463,9 +468,7 @@ void run_server() {
         else if (taskType == "iprg" || taskType == "IPRG") taskJson.emplace_back("-iprg");
         else taskJson.emplace_back("-open");
 
-        callMode(modeW, taskJson);
-
-        res.set_content("OK\n", "text/plain");
+        res.set_content(callMode(modeW, taskJson), "text/plain");
     });     // works
 
     // Put methods
@@ -482,9 +485,7 @@ void run_server() {
             else if (taskType == "open" || taskType == "OPEN") taskJson.emplace_back("-open");
         }
 
-        callMode(modeU, taskJson);
-
-        res.set_content("OK\n", "text/plain");
+        res.set_content(callMode(modeU, taskJson), "text/plain");
     });     // works
 
     // Delete methods (one for soft delete and one for purging the trash can (soft delete takes id, purge is nothing but needs to be confirmed in terminal))
@@ -498,7 +499,7 @@ void run_server() {
 
         std::vector<std::string> taskJson = split(ids, ',');
 
-        callMode(modeD, taskJson);
+        res.set_content(callMode(modeD, taskJson), "text/plain");
     });     // works
 
     svr.Delete("/tasks/purge", [](const httplib::Request& req, httplib::Response& res) {
