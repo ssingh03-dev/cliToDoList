@@ -2,7 +2,6 @@
 #include <iostream>
 #include <vector>
 #include <string>
-#include <cstring>
 #include <algorithm>
 #include <iomanip>
 
@@ -103,7 +102,7 @@ void modeR(const int argc, char* argv[]) {
                     && std::all_of(argv[i + 1], argv[i + 1] + strlen(argv[i + 1]), ::isdigit)
                     && std::stoi(argv[i + 1]) >= 0) {
                     rangeMode = "last";
-                    firstNumber = std::stoi(argv[i + 1]);
+                    firstNumber = maxNumber - std::stoi(argv[i + 1]) + 1;
                     secondNumber = maxNumber;
                     i = i + 1;
                 } else {
@@ -359,7 +358,7 @@ int getTaskCount() {
 // for method modes that take in cli arguments
 using modeFunc = void(*)(int, char**);
 
-// add a method to convert JSON to argv/argc for arguments, then it calls the appropriate function (modeP can be called directly)
+// add a method to convert JSON to argv/argc for arguments; then it calls the appropriate function (modeP can be called directly)
 std::string callMode(modeFunc mode, std::vector<std::string> cliArgs) {
     std::ostringstream oss;
     std::streambuf* old = std::cout.rdbuf(oss.rdbuf());  // Redirect cout
