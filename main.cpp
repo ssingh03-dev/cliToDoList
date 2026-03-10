@@ -27,14 +27,16 @@ int getTaskCount();
 // basically just skip all the dele lines (probably just for the default/all types mode)
 // also id gets potentially overwritten after each purge since it's simply a line number (technically not id)
 // method when mode is r
-void modeR(const int argc, char* argv[]) {
+json modeR(const int argc, char* argv[], bool returnJson = false) {
     // options going to be done, open, or iprg (inprogress); and -first, -se, or -last (decided to do only one)
     // if given multiple, only the last of the two will be considered
     // all other options will be given a warning, but it still continues based on the last valid one (default included)
 
+    json tasks = json::array();  // JSON result
+
     std::ifstream infile("tasks.txt");
 
-    if (argc == 2) {    // here, also add thier ids next to them too
+    if (argc == 2) {    // here, also add their ids next to them too
 
         std::cout << std::left
               << std::setw(6) << " ID"
@@ -52,6 +54,14 @@ void modeR(const int argc, char* argv[]) {
                 std::cout << std::right << std::setw(4) << lineNum
                           << std::left << std::setw(10) << std::string("   ") + status
                           << line.substr(5) << std::endl;   // skipped space to better align with top
+
+                if (returnJson) {
+                    tasks.push_back(json::object({
+                        {"id", lineNum},
+                        {"status", status},
+                        {"description", line.substr(5)},
+                    }));
+                }
             }
 
             lineNum++;
@@ -136,6 +146,14 @@ void modeR(const int argc, char* argv[]) {
                 std::getline(infile, line); // probably inefficient
                 if (status == taskType) {
                     std::cout << i << ":" << line << std::endl;
+
+                    if (returnJson) {
+                        tasks.push_back(json::object({
+                            {"id", i},
+                            {"status", status},
+                            {"description", line.substr(1)},
+                        }));
+                    }
                 }
             }
         } else {
@@ -146,15 +164,24 @@ void modeR(const int argc, char* argv[]) {
                 std::getline(infile, line); // probably inefficient
                 if (status != std::string("TRSH")) {        // so it skips soft deleted stuff here
                     std::cout << i << ":" << line << std::endl;
+                    if (returnJson) {
+                        tasks.push_back(json::object({
+                            {"id", i},
+                            {"status", status},
+                            {"description", line.substr(1)},
+                        }));
+                    }
                 }
             }
         }
     }
     infile.close();
+
+    return tasks;
 }
 
 // method when mode is w
-void modeW(const int argc, char* argv[]) {
+json modeW(const int argc, char* argv[], bool returnJson = false) {
     // the 3rd arg is the task description, and it's assumed the task description is surrounded by quotation marks
     // for extra flags, it's going to be put in a loop and only looks for one flag, open, done, or iprg
     // if nothing or invalid results only, then defaults to open flag
@@ -182,11 +209,13 @@ void modeW(const int argc, char* argv[]) {
     std::cout << "Task added." << std::endl;
 
     outfile.close();
+
+    return json::object();
 }
 
 // if id hits a dead task, tell them it's been (soft)deleted, and to redo it then do the delete opt for this id again
 // method when mode is u
-void modeU(const int argc, char* argv[]) {
+json modeU(const int argc, char* argv[], bool returnJson = false) {
     // basically just updating the specific task by id (can get id by reading the specific task type)
     std::fstream file("tasks.txt", std::ios::in | std::ios::out);
 
@@ -241,6 +270,8 @@ void modeU(const int argc, char* argv[]) {
         std::cout << "Task number out of range." << std::endl;
     }
     file.close();
+
+    return json::object();
 }
 
 // method to mark a line to be deleted (TRSH) or undo the DELE by going through this method again (resets to open)
@@ -273,7 +304,7 @@ void toggleDelete(const int lineNum) {    // precondition is lineNum >= 1 and li
 }
 
 // method to specify which line(s) to soft-delete (1 or many) (basically skips it when viewing, others need changing)
-void modeD(const int argc, char* argv[]) {
+json modeD(const int argc, char* argv[], bool returnJson = false) {
     const int maxNumber = getTaskCount();
 
     if (argc > 2) { // after choosing mode, it needs to specify the line numbers to be deleted
@@ -287,6 +318,8 @@ void modeD(const int argc, char* argv[]) {
     } else {
         std::cout << "No line numbers specified." << std::endl;
     }
+
+    return json::object();
 }
 
 // method to purge the marked soft-deleted items
@@ -356,12 +389,12 @@ int getTaskCount() {
 }
 
 // for method modes that take in cli arguments
-using modeFunc = void(*)(int, char**);
+using modeFunc = json(*)(int, char**, bool);
 
 // add a method to convert JSON to argv/argc for arguments; then it calls the appropriate function (modeP can be called directly)
-std::string callMode(modeFunc mode, std::vector<std::string> cliArgs) {
-    std::ostringstream oss;
-    std::streambuf* old = std::cout.rdbuf(oss.rdbuf());  // Redirect cout
+json callMode(modeFunc mode, std::vector<std::string> cliArgs) {
+    // std::ostringstream oss;
+    // std::streambuf* old = std::cout.rdbuf(oss.rdbuf());  // Redirect cout
 
     // first add arg [0] as a placeholder
     std::vector<std::string> fullArgs;
@@ -377,11 +410,11 @@ std::string callMode(modeFunc mode, std::vector<std::string> cliArgs) {
         cargs.push_back(const_cast<char*>(s.c_str()));
     }
 
-    mode(static_cast<int>(cargs.size()), cargs.data());
+    json result = mode(static_cast<int>(cargs.size()), cargs.data(), true);
 
-    std::cout.rdbuf(old);  // Restore
+    // std::cout.rdbuf(old);  // Restore
 
-    return oss.str();
+    return result;  // oss.str();
 }
 
 std::vector<std::string> split(const std::string& str, char delim) {
@@ -443,7 +476,7 @@ void run_server() {
             taskJson.push_back(lastIndex);
         }
 
-        res.set_content(callMode(modeR, taskJson), "text/plain");
+        res.set_content(callMode(modeR, taskJson).dump(2), "text/plain");
     });
 
     // Post methods
@@ -467,7 +500,7 @@ void run_server() {
         else if (taskType == "iprg" || taskType == "IPRG") taskJson.emplace_back("-iprg");
         else taskJson.emplace_back("-open");
 
-        res.set_content(callMode(modeW, taskJson), "text/plain");
+        res.set_content(callMode(modeW, taskJson).dump(2), "text/plain");
     });     // works
 
     // Put methods
@@ -484,7 +517,7 @@ void run_server() {
             else if (taskType == "open" || taskType == "OPEN") taskJson.emplace_back("-open");
         }
 
-        res.set_content(callMode(modeU, taskJson), "text/plain");
+        res.set_content(callMode(modeU, taskJson).dump(2), "text/plain");
     });     // works
 
     // Delete methods (one for soft delete and one for purging the trash can (soft delete takes id, purge is nothing but needs to be confirmed in terminal))
@@ -498,7 +531,7 @@ void run_server() {
 
         std::vector<std::string> taskJson = split(ids, ',');
 
-        res.set_content(callMode(modeD, taskJson), "text/plain");
+        res.set_content(callMode(modeD, taskJson).dump(2), "text/plain");
     });     // works
 
     svr.Delete("/tasks/purge", [](const httplib::Request& req, httplib::Response& res) {
