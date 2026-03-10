@@ -210,6 +210,17 @@ json modeW(const int argc, char* argv[], bool returnJson = false) {
 
     outfile.close();
 
+    if (returnJson) {
+        return {
+            "created",
+            json::object({
+                {"id", getTaskCount()},
+                {"status", taskType},
+                {"description", taskDesc},
+            })
+        };
+    }
+
     return json::object();
 }
 
@@ -217,6 +228,8 @@ json modeW(const int argc, char* argv[], bool returnJson = false) {
 // method when mode is u
 json modeU(const int argc, char* argv[], bool returnJson = false) {
     // basically just updating the specific task by id (can get id by reading the specific task type)
+    json ret = json::object();
+
     std::fstream file("tasks.txt", std::ios::in | std::ios::out);
 
     int maxNumber = getTaskCount();
@@ -263,8 +276,29 @@ json modeU(const int argc, char* argv[], bool returnJson = false) {
             file.seekp(lineStartPos);
             file.write(taskType.c_str(), 4);
             std::cout << "The status of task " << argv[2] << " changed from '" << status << "' to '" << taskType << "'." << std::endl;
+            if (returnJson) {
+                file.close();
+                return {
+                    json::object({
+                        {"status", "changed"},
+                        {"id", std::stoi(argv[2])},
+                        {"old_status", status},
+                        {"new_status", taskType},
+                    })
+                };
+            }
         } else {
             std::cout << "The status of task " << argv[2] << " did not change." << std::endl;
+            if (returnJson) {
+                file.close();
+                return {
+                    json::object({
+                        {"status", "unchanged"},
+                        {"id", std::stoi(argv[2])},
+                        {"current_status", status},
+                    })
+                };
+            }
         }
     } else {
         std::cout << "Task number out of range." << std::endl;
@@ -275,7 +309,7 @@ json modeU(const int argc, char* argv[], bool returnJson = false) {
 }
 
 // method to mark a line to be deleted (TRSH) or undo the DELE by going through this method again (resets to open)
-void toggleDelete(const int lineNum) {    // precondition is lineNum >= 1 and lineNum <= count from count.txt file
+json toggleDelete(const int lineNum) {    // precondition is lineNum >= 1 and lineNum <= count from count.txt file
     std::fstream file("tasks.txt", std::ios::in | std::ios::out);
 
     std::string dummy;
@@ -295,28 +329,45 @@ void toggleDelete(const int lineNum) {    // precondition is lineNum >= 1 and li
         file.seekp(lineStartPos);
         file.write("OPEN", 4);
         std::cout << "Task " << lineNum << " has been undeleted." << std::endl;
-    } else {
-        file.seekp(lineStartPos);
-        file.write("TRSH", 4);
-        std::cout << "Task " << lineNum << " has been deleted." << std::endl;
+        file.close();
+        return json::object({
+                {"action", "undeleted"},
+                {"id", lineNum},
+                {"status", "OPEN"},
+        });
     }
+
+    file.seekp(lineStartPos);
+    file.write("TRSH", 4);
+    std::cout << "Task " << lineNum << " has been deleted." << std::endl;
     file.close();
+    return json::object({
+            {"action", "deleted"},
+            {"id", lineNum},
+            {"status", "TRSH"},
+    });
 }
 
 // method to specify which line(s) to soft-delete (1 or many) (basically skips it when viewing, others need changing)
 json modeD(const int argc, char* argv[], bool returnJson = false) {
+    json ret = json::array();
+
     const int maxNumber = getTaskCount();
 
     if (argc > 2) { // after choosing mode, it needs to specify the line numbers to be deleted
         for (int i = 2; i < argc; i++) {
             if (std::stoi(argv[i]) <= maxNumber) {
-                toggleDelete(std::stoi(argv[i]));
+                ret.push_back(toggleDelete(std::stoi(argv[i])));
             } else {
                 std::cout << "Line number out of range." << std::endl;
             }
         }
     } else {
         std::cout << "No line numbers specified." << std::endl;
+    }
+
+    if (returnJson) {
+        return ret;
     }
 
     return json::object();
@@ -477,6 +528,7 @@ void run_server() {
         }
 
         res.set_content(callMode(modeR, taskJson).dump(2), "text/plain");
+        res.status = 200;
     });
 
     // Post methods
@@ -501,6 +553,7 @@ void run_server() {
         else taskJson.emplace_back("-open");
 
         res.set_content(callMode(modeW, taskJson).dump(2), "text/plain");
+        res.status = 201;
     });     // works
 
     // Put methods
@@ -518,6 +571,7 @@ void run_server() {
         }
 
         res.set_content(callMode(modeU, taskJson).dump(2), "text/plain");
+        res.status = 200;
     });     // works
 
     // Delete methods (one for soft delete and one for purging the trash can (soft delete takes id, purge is nothing but needs to be confirmed in terminal))
@@ -532,6 +586,7 @@ void run_server() {
         std::vector<std::string> taskJson = split(ids, ',');
 
         res.set_content(callMode(modeD, taskJson).dump(2), "text/plain");
+        res.status = 200;
     });     // works
 
     svr.Delete("/tasks/purge", [](const httplib::Request& req, httplib::Response& res) {
@@ -558,7 +613,10 @@ void run_server() {
         purgeTrash();
 
         res.set_content("OK\n", "text/plain");
+        res.status = 200;
     });     // works (doesn't need to be confirmed in terminal)
+    // for purge json it so for token empty it returns a json object with last one confirm, token
+    // for the actual purge, return all the tasks it purged, changing status to purged or prgd
 
     // basic methods work, but need updating to return the information somehow
     // for purge utilize token, first request generates a token which is used in the second request as a way to confirm
@@ -566,7 +624,7 @@ void run_server() {
 
     // Run Server
     std::cout << "Starting server...\n";
-    svr.listen("0.0.0.0", 8080);  // ← BLOCKS HERE FOREVER
+    svr.listen("0.0.0.0", HTTP_PORT);  // ← BLOCKS HERE FOREVER
     std::cout << "This line never runs\n";
 }
 

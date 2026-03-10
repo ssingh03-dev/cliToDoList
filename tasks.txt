@@ -7,4 +7,3 @@ OPEN This is Test Task Seven.
 OPEN This is Test Task Eight.
 OPEN This is Test Task Nine.
 OPEN This is Test Task Ten.
-IPRG This is API Test Task One.
