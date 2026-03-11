@@ -19,7 +19,7 @@
 constexpr int HTTP_PORT = 8080;
 
 // vars
-using json = nlohmann::json;
+using json = nlohmann::ordered_json;
 
 // declarations
 int getTaskCount();
@@ -396,22 +396,33 @@ void purgeTrash() {
 }
 
 // method to purge the marked soft-deleted items
-void modeP(bool isCli = true) {
+json modeP(bool isCli = true) {
     // Prints all the marked items and confirms with the user if they still want to purge the items
+    json ret = json::array();
+
     std::ifstream infile("tasks.txt");
 
+    int i = 1;
     int items = 0;
     std::string line;
     while (std::getline(infile, line)) {
         if (line.substr(0, 4) == "TRSH") {
-            std::cout << line << std::endl;
+            std::cout << i << line.substr(4) << std::endl;
             items++;
+
+            if (!isCli) {
+                ret.push_back(json::object({
+                    {"id", i},
+                    {"description", line.substr(5)},
+                }));
+            }
         }
+        i++;
     }
 
     if (items == 0) {
         std::cout << "No marked items to purge." << std::endl;
-        return;
+        return json::object();
     }
 
     if (isCli) {    // only in cli you confirm here; in http, purgeTrash is called in the delete method
@@ -428,6 +439,7 @@ void modeP(bool isCli = true) {
                   << "Purge ALL " << items
                   << " TRASH item(s) listed above? This CANNOT be undone! (If yes, paste handler after DELETE route).";
     }
+    return ret;
 }
 
 // method to get number of lines (delete count.txt file)
@@ -439,7 +451,7 @@ int getTaskCount() {
     return count;
 }
 
-// for method modes that take in cli arguments
+// for method modes that take in CLI arguments
 using modeFunc = json(*)(int, char**, bool);
 
 // add a method to convert JSON to argv/argc for arguments; then it calls the appropriate function (modeP can be called directly)
@@ -595,12 +607,23 @@ void run_server() {
             // generate token here and save it in run_server variable (only latest token considered)
             generateToken();
 
-            std::ostringstream oss;
-            std::streambuf* old = std::cout.rdbuf(oss.rdbuf());  // Redirect cout
-            modeP(false);
-            std::cout.rdbuf(old);  // Restore
+            // std::ostringstream oss;
+            // std::streambuf* old = std::cout.rdbuf(oss.rdbuf());  // Redirect cout
+            json items = modeP(false);
 
-            res.set_content(oss.str()+"\nConfirm: ?token=" + latestToken + "\n", "text/plain");
+            json ret = json::object({
+                    {"status", "pending"},
+                    {"trash_count", items.size()},
+                    {"items", items},
+                    {"confirm", {
+                        {"token", latestToken},
+                        {"hint", "DELETE /tasks/purge?token=" + latestToken}
+                    }}
+            });
+            // std::cout.rdbuf(old);  // Restore
+
+            // res.set_content(oss.str()+"\nConfirm: ?token=" + latestToken + "\n", "text/plain");
+            res.set_content(ret.dump(2), "text/plain");
             return;
         }
 
