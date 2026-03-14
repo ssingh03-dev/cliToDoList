@@ -4,12 +4,11 @@
 #include <string>
 #include <algorithm>
 #include <iomanip>
+#include <sqlite3.h>
 
 #include "json.hpp"
 #include "httplib.h"
 
-// TODO add api methods that call upon the CLI methods
-// TODO update main method to add a decision for it to be cli or api, like if arg[1] is --api (main split into two branches)
 // TODO migrate tasks.txt file to a SQLite database
 // TODO (optional) improve performance by using modern C++20 features
 
@@ -24,13 +23,13 @@ using json = nlohmann::ordered_json;
 // declarations
 int getTaskCount();
 
-// basically just skip all the dele lines (probably just for the default/all types mode)
+// basically skip all the dele lines (probably just for the default/all types mode)
 // also id gets potentially overwritten after each purge since it's simply a line number (technically not id)
 // method when mode is r
 json modeR(const int argc, char* argv[], bool returnJson = false) {
-    // options going to be done, open, or iprg (inprogress); and -first, -se, or -last (decided to do only one)
+    // options going to be done, open, or iprg (in progress); and -first, -se, or -last (decided to do only one)
     // if given multiple, only the last of the two will be considered
-    // all other options will be given a warning, but it still continues based on the last valid one (default included)
+    // all other options will be given a warning, but it continues based on the last valid one (default included)
 
     json tasks = json::array();  // JSON result
 
@@ -652,6 +651,22 @@ void run_server() {
 }
 
 int main(const int argc, char* argv[]) {
+
+    // sqlit
+    sqlite3* db = nullptr;
+
+    if (sqlite3_open("tasks.db", &db) != SQLITE_OK) {
+        std::cout << "Error opening database." << std::endl;
+        return 1;
+    }
+
+    const char* createSql = "CREATE TABLE IF NOT EXISTS tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, task TEXT NOT NULL, type TEXT NOT NULL, date TEXT)";
+
+    sqlite3_exec(db, createSql, nullptr, nullptr, nullptr);
+
+    // add as parameter to methods (..., sqlite3* db) and pass it as &db (pointers are still confusing)
+
+    // TODO also with sqlite being added, need to check logic where id is considered the same as line number
 
     // The first line/number of the file will be the total number of tasks. Compare with ranges to see if out of bounds.
     // Look through the note app to see what to implement.
