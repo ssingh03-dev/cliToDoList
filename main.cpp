@@ -26,7 +26,7 @@ int getTaskCount();
 // basically skip all the dele lines (probably just for the default/all types mode)
 // also id gets potentially overwritten after each purge since it's simply a line number (technically not id)
 // method when mode is r
-json modeR(const int argc, char* argv[], bool returnJson = false) {
+json modeR(sqlite3* db, int argc, char* argv[], bool returnJson = false) {
     // options going to be done, open, or iprg (in progress); and -first, -se, or -last (decided to do only one)
     // if given multiple, only the last of the two will be considered
     // all other options will be given a warning, but it continues based on the last valid one (default included)
@@ -180,7 +180,7 @@ json modeR(const int argc, char* argv[], bool returnJson = false) {
 }
 
 // method when mode is w
-json modeW(const int argc, char* argv[], bool returnJson = false) {
+json modeW(sqlite3* db, const int argc, char* argv[], bool returnJson = false) {
     // the 3rd arg is the task description, and it's assumed the task description is surrounded by quotation marks
     // for extra flags, it's going to be put in a loop and only looks for one flag, open, done, or iprg
     // if nothing or invalid results only, then defaults to open flag
@@ -225,7 +225,7 @@ json modeW(const int argc, char* argv[], bool returnJson = false) {
 
 // if id hits a dead task, tell them it's been (soft)deleted, and to redo it then do the delete opt for this id again
 // method when mode is u
-json modeU(const int argc, char* argv[], bool returnJson = false) {
+json modeU(sqlite3* db, const int argc, char* argv[], bool returnJson = false) {
     // basically just updating the specific task by id (can get id by reading the specific task type)
     json ret = json::object();
 
@@ -308,7 +308,8 @@ json modeU(const int argc, char* argv[], bool returnJson = false) {
 }
 
 // method to mark a line to be deleted (TRSH) or undo the DELE by going through this method again (resets to open)
-json toggleDelete(const int lineNum) {    // precondition is lineNum >= 1 and lineNum <= count from count.txt file
+json toggleDelete(sqlite3* db, const int lineNum) {    // precondition is lineNum >= 1 and lineNum <= count from count.txt file
+    // precondition does not hold when using the SQLite database since the ID autoincrements (lineNumber = ID)
     std::fstream file("tasks.txt", std::ios::in | std::ios::out);
 
     std::string dummy;
@@ -348,7 +349,7 @@ json toggleDelete(const int lineNum) {    // precondition is lineNum >= 1 and li
 }
 
 // method to specify which line(s) to soft-delete (1 or many) (basically skips it when viewing, others need changing)
-json modeD(const int argc, char* argv[], bool returnJson = false) {
+json modeD(sqlite3* db, const int argc, char* argv[], bool returnJson = false) {
     json ret = json::array();
 
     const int maxNumber = getTaskCount();
@@ -356,7 +357,7 @@ json modeD(const int argc, char* argv[], bool returnJson = false) {
     if (argc > 2) { // after choosing mode, it needs to specify the line numbers to be deleted
         for (int i = 2; i < argc; i++) {
             if (std::stoi(argv[i]) <= maxNumber) {
-                ret.push_back(toggleDelete(std::stoi(argv[i])));
+                ret.push_back(toggleDelete(db, std::stoi(argv[i])));
             } else {
                 std::cout << "Line number out of range." << std::endl;
             }
@@ -373,7 +374,7 @@ json modeD(const int argc, char* argv[], bool returnJson = false) {
 }
 
 // method to purge the marked soft-deleted items
-void purgeTrash() {
+void purgeTrash(sqlite3* db) {
     std::ifstream infile("tasks.txt");
 
     std::vector<std::string> nonTrash;
@@ -395,7 +396,7 @@ void purgeTrash() {
 }
 
 // method to purge the marked soft-deleted items
-json modeP(bool isCli = true) {
+json modeP(sqlite3* db, bool isCli = true) {
     // Prints all the marked items and confirms with the user if they still want to purge the items
     json ret = json::array();
 
@@ -431,7 +432,7 @@ json modeP(bool isCli = true) {
                   << " TRASH item(s) listed above? This CANNOT be undone! (y/n): ";
         std::getline(std::cin, confirm);
 
-        if (!confirm.empty() && (confirm[0] == 'y' || confirm[0] == 'Y')) purgeTrash();
+        if (!confirm.empty() && (confirm[0] == 'y' || confirm[0] == 'Y')) purgeTrash(db);
     } else {
         std::string confirm;
         std::cout << std::endl
@@ -442,7 +443,7 @@ json modeP(bool isCli = true) {
 }
 
 // method to get number of lines (delete count.txt file)
-int getTaskCount() {
+int getTaskCount(sqlite3* db) {
     std::ifstream file("tasks.txt");
     std::string dummy;
     int count = 0;
@@ -451,10 +452,10 @@ int getTaskCount() {
 }
 
 // for method modes that take in CLI arguments
-using modeFunc = json(*)(int, char**, bool);
+using modeFunc = json(*)(sqlite3*, int, char**, bool);
 
 // add a method to convert JSON to argv/argc for arguments; then it calls the appropriate function (modeP can be called directly)
-json callMode(modeFunc mode, std::vector<std::string> cliArgs) {
+json callMode(sqlite3* db, modeFunc mode, std::vector<std::string> cliArgs) {
     // std::ostringstream oss;
     // std::streambuf* old = std::cout.rdbuf(oss.rdbuf());  // Redirect cout
 
@@ -472,7 +473,7 @@ json callMode(modeFunc mode, std::vector<std::string> cliArgs) {
         cargs.push_back(const_cast<char*>(s.c_str()));
     }
 
-    json result = mode(static_cast<int>(cargs.size()), cargs.data(), true);
+    json result = mode(db, static_cast<int>(cargs.size()), cargs.data(), true);
 
     // std::cout.rdbuf(old);  // Restore
 
@@ -504,12 +505,12 @@ void generateToken() {
 }
 
 // add http method to get api calls with proper format, use the above conversion from JSON to argv, which also calls the method
-void run_server() {
+void run_server(sqlite3* db) {
     // HTTP
     httplib::Server svr;
 
     // Get methods (still needs to be tested)
-    svr.Get("/tasks", [](const httplib::Request& req, httplib::Response& res) {
+    svr.Get("/tasks", [db](const httplib::Request& req, httplib::Response& res) {
         std::string firstIndex = req.get_param_value("first");
         std::string lastIndex = req.get_param_value("last");
         std::string taskType = req.get_param_value("type");
@@ -538,12 +539,12 @@ void run_server() {
             taskJson.push_back(lastIndex);
         }
 
-        res.set_content(callMode(modeR, taskJson).dump(2), "text/plain");
+        res.set_content(callMode(db, modeR, taskJson).dump(2), "text/plain");
         res.status = 200;
     });
 
     // Post methods
-    svr.Post("/tasks", [](const httplib::Request& req, httplib::Response& res) {
+    svr.Post("/tasks", [db](const httplib::Request& req, httplib::Response& res) {
         json body;
         try {
             body = json::parse(req.body);
@@ -563,12 +564,12 @@ void run_server() {
         else if (taskType == "iprg" || taskType == "IPRG") taskJson.emplace_back("-iprg");
         else taskJson.emplace_back("-open");
 
-        res.set_content(callMode(modeW, taskJson).dump(2), "text/plain");
+        res.set_content(callMode(db, modeW, taskJson).dump(2), "text/plain");
         res.status = 201;
     });     // works
 
     // Put methods
-    svr.Put(R"(/tasks/(\d+))", [](const httplib::Request& req, httplib::Response& res) {
+    svr.Put(R"(/tasks/(\d+))", [db](const httplib::Request& req, httplib::Response& res) {
         std::string id = req.matches[1];
         std::string taskType = req.get_param_value("type");
 
@@ -581,12 +582,12 @@ void run_server() {
             else if (taskType == "open" || taskType == "OPEN") taskJson.emplace_back("-open");
         }
 
-        res.set_content(callMode(modeU, taskJson).dump(2), "text/plain");
+        res.set_content(callMode(db, modeU, taskJson).dump(2), "text/plain");
         res.status = 200;
     });     // works
 
     // Delete methods (one for soft delete and one for purging the trash can (soft delete takes id, purge is nothing but needs to be confirmed in terminal))
-    svr.Delete("/tasks", [](const httplib::Request& req, httplib::Response& res) {
+    svr.Delete("/tasks", [db](const httplib::Request& req, httplib::Response& res) {
         std::string ids = req.get_param_value("ids");
         if (ids.empty()) {
             res.status = 400;
@@ -596,11 +597,11 @@ void run_server() {
 
         std::vector<std::string> taskJson = split(ids, ',');
 
-        res.set_content(callMode(modeD, taskJson).dump(2), "text/plain");
+        res.set_content(callMode(db, modeD, taskJson).dump(2), "text/plain");
         res.status = 200;
     });     // works
 
-    svr.Delete("/tasks/purge", [](const httplib::Request& req, httplib::Response& res) {
+    svr.Delete("/tasks/purge", [db](const httplib::Request& req, httplib::Response& res) {
         std::string token = req.get_param_value("token");
         if (token.empty()) {
             // generate token here and save it in run_server variable (only latest token considered)
@@ -608,7 +609,7 @@ void run_server() {
 
             // std::ostringstream oss;
             // std::streambuf* old = std::cout.rdbuf(oss.rdbuf());  // Redirect cout
-            json items = modeP(false);
+            json items = modeP(db, false);
 
             json ret = json::object({
                     {"status", "pending"},
@@ -632,7 +633,7 @@ void run_server() {
             return;
         }
 
-        purgeTrash();
+        purgeTrash(db);
 
         res.set_content("OK\n", "text/plain");
         res.status = 200;
@@ -674,7 +675,7 @@ int main(const int argc, char* argv[]) {
     // The To-Do List file is system-based and automatically generated.
 
     if (argc > 1 && strcmp(argv[1], "--api") == 0) {
-        run_server();   // blocks here until Ctrl+C
+        run_server(db);   // blocks here until Ctrl+C
         return 0;            // never reached normally
     }
 
@@ -702,19 +703,19 @@ int main(const int argc, char* argv[]) {
 
     if (strcmp(argv[1], "r") == 0) {
         // check for corrections or errors, then call the method for r
-        modeR(argc, argv);
+        modeR(db, argc, argv);
     } else if (strcmp(argv[1], "w") == 0) {
         // check for corrections or errors, then call the method for w
-        if (argc > 2 ) modeW(argc, argv);
+        if (argc > 2 ) modeW(db, argc, argv);
         else std::cout << "No task specified." << std::endl;
     } else if (strcmp(argv[1], "u") == 0) {
         // check for corrections or errors, then call the method for u
-        if (argc > 2) modeU(argc, argv);
+        if (argc > 2) modeU(db, argc, argv);
         else std::cout << "No task/ticket number specified." << std::endl;
     } else if (strcmp(argv[1], "d") == 0) {
-        modeD(argc, argv);
+        modeD(db, argc, argv);
     } else if (strcmp(argv[1], "p") == 0) {
-        modeP();
+        modeP(db);
     } else {
         std::cout << "Invalid mode specified." << std::endl;
         return 1;
